@@ -14,13 +14,15 @@ public class SAT_Solvers
 	public SAT_Solvers()
 	{
 		topC = 0; 
-		nodesExpanded = 0; // only reason this class isn't entirely static is so that
-		// I don't have to return a model and this at the same time, I don't
-		// want to code in pairs.
+		nodesExpanded = 0;
+		// these just help keep track of data so that I don't have to have functions return their values
 	}
 	
 	public ArrayList<int []> readClausesFromFile(String inputFilePath)
 	{
+		// returns a list of arrays, where each array represents a clause.
+		// input is the filepath
+		
 		ArrayList<int []> clauses = new ArrayList<int []>();
 		try
 		{
@@ -64,10 +66,11 @@ public class SAT_Solvers
 		return clauses;
 	}
 	
-	// returns -1 if the clause is false,
-	// 0 if it is unknown, and 1 if true
 	private int clauseTF(int [] clause, HashMap<Integer, Boolean> model)
 	{
+		// given a clause and a model, will return an int representing whether the clause is satisfied
+		// 1 for sat, -1 for unsat, 0 for unknown
+		
 		boolean unknown = false;
 		for(int var : clause)
 		{
@@ -84,6 +87,8 @@ public class SAT_Solvers
 	
 	private int modelTF(ArrayList<int []> clauses, HashMap<Integer, Boolean> model)
 	{
+		// determines if the model satisfies the clauses using clauseTF
+		// again, 1 for sat, -1 for unsat, and 0 for unknown
 		boolean unknown = false;
 		for(int [] clause : clauses)
 		{
@@ -103,6 +108,8 @@ public class SAT_Solvers
 	
 	private int evaluateModel(ArrayList<int []> clauses, HashMap<Integer, Boolean> model)
 	{
+		// returns how many clauses are satisfied with the given model
+		
 		int c = 0;
 		for(int [] clause : clauses)
 			if(clauseTF(clause, model) == 1)
@@ -112,8 +119,12 @@ public class SAT_Solvers
 	
 	public HashMap<Integer, Boolean> DPLL(ArrayList<int []> clauses, ArrayList<Integer> symbols, HashMap<Integer, Boolean> model)
 	{
+		// the first search I have, determines if a model exists that satisfies the clauses with a dfs and some pruning
+		// recursive, takes the clauses, a list of the variables in the clauses that are unassigned, and the model.
+		
 		nodesExpanded++;
-		// return true if all clauses are true and return false if any clause is false
+		
+		// first, return true if all clauses are true and return false if any clause is false
 		int isModSat = modelTF(clauses, model);
 		if(isModSat == 1)
 		{
@@ -174,6 +185,8 @@ public class SAT_Solvers
 	
 	private int findPureSymbol(ArrayList<int []> clauses, ArrayList<Integer> symbols, HashMap<Integer, Boolean> model)
 	{
+		// finds any symbol in the clauses that appears consistently, ie always x1 rather than -x1
+		// returns the positive of that symbol if it always appears positive and negative if it always appears negative
 		int [] posNeg = new int [symbols.size()];
 		for(int [] clause : clauses)
 		{
@@ -201,7 +214,7 @@ public class SAT_Solvers
 	private int findUnitClause(ArrayList<int []> clauses, ArrayList<Integer> symbols, HashMap<Integer, Boolean> model)
 	{
 		// a unit clause exists if every symbol in a clause is the same, including positivity and negativity
-		// if one is found, returns the symbol in that clause
+		// if one is found, returns the symbol in that clause, including sign
 		for(int [] clause : clauses)
 		{
 			boolean b = true;
@@ -230,79 +243,90 @@ public class SAT_Solvers
 	
 	public HashMap<Integer, Boolean> walkSAT(ArrayList<int []> clauses, double p, int maxFlips)
 	{
-		// randomize every symbol in model
-		HashMap<Integer, Boolean> model = new HashMap<Integer, Boolean>();
-		for(int [] clause : clauses)
-		{
-			for(int symbol : clause)
-			{
-				if(! model.containsKey(symbol))
-				{
-					double rand = Math.random();
-					Boolean value = Boolean.valueOf(false);
-					if(rand > .5)
-						value = Boolean.valueOf(true);
-					model.put(symbol, value);
-				}
-			}
-		}
+		/*
+		 I noticed with this method that often it will come very close to an answer but fail to find a solution
+		 seemingly it gets stuck in a local minimum, so something that can help is to start over from a different 
+		 starting point, rerandomize it and try again.  Hence this try loop.
 		
-		for(int i = 0; i < maxFlips; i++)
+		 This method starts with a randomized model, then based on a paramatarized probability, decides to either
+		 pick a random variable in a random false clause to flip, or to flip the variable that results in the 
+		 highest number of satisfied clauses.  It continues to flip until it times out with a paramatarized maxflip counter
+		 */
+		int tries = 5;
+		while(tries != 0)
 		{
-			int myC = evaluateModel(clauses, model);
-			if(myC > topC)
-				topC = myC;
+			tries--;
 			
-			// if model is good then stop
-			if(modelTF(clauses, model) == 1)
+			// randomize every symbol in model
+			HashMap<Integer, Boolean> model = new HashMap<Integer, Boolean>();
+			for(int [] clause : clauses)
 			{
-				System.out.println("Success");
-				return model;
-			}
-			
-			int [] clause = clauses.get(findRandFalseClauseIndex(clauses, model));
-			if(clauseTF(clause, model) != -1)
-			{
-				System.out.println("wtf");
-				return null;
-			}
-			if(Math.random() < p)
-			{
-				// flip a random symbol in the false clause
-				int key = Math.abs(clause[(int) Math.random() * clause.length]);
-				System.out.println(key);
-				flipVal(model, Integer.valueOf(key));
-			}
-			else
-			{
-				// flip the symbol that maximizes satisfied clauses in model after that flip
-				Integer bestKey = Integer.valueOf(0);
-				int minC = Integer.MAX_VALUE;
-				for(Integer key : model.keySet())
+				for(int symbol : clause)
 				{
-					flipVal(model, key);
-					int currC = evaluateModel(clauses, model);
-					flipVal(model, key);
-					if(currC < minC)
+					symbol = Math.abs(symbol);
+					if(! model.containsKey(symbol))
 					{
-						bestKey = key;
-						minC = currC;
+						double rand = Math.random();
+						Boolean value = Boolean.valueOf(false);
+						if(rand > .5)
+							value = Boolean.valueOf(true);
+						model.put(symbol, value);
 					}
 				}
+			}
+			
+			// start flipping variables
+			for(int i = 0; i < maxFlips; i++)
+			{	
+				int myC = evaluateModel(clauses, model);
+				if(myC > topC)
+					topC = myC;
 				
-				flipVal(model, bestKey);
-				if(evaluateModel(clauses, model) > myC)
+				// if model is good then stop
+				if(modelTF(clauses, model) == 1)
 				{
-					System.out.println("Warning: maximized flip caused decreased evaluation");
+					return model;
+				}
+				
+				int [] clause = clauses.get(findRandFalseClauseIndex(clauses, model));
+				if(clauseTF(clause, model) != -1)
+				{
+					System.out.println("Error: finding random false clauses doesn't always find clauses that are false");
+					return null;
+				}
+				if(Math.random() < p)
+				{
+					// flip a random symbol in the false clause
+					int key = Math.abs(clause[(int) Math.random() * clause.length]);
+					flipVal(model, Integer.valueOf(key));
+				}
+				else
+				{
+					// flip the symbol that maximizes satisfied clauses in model after that flip
+					Integer bestKey = Integer.valueOf(0);
+					int maxC = Integer.valueOf(0);
+					for(Integer key : model.keySet())
+					{
+						flipVal(model, key);
+						int currC = evaluateModel(clauses, model);
+						flipVal(model, key);
+						if(currC > maxC)
+						{
+							bestKey = key;
+							maxC = currC;
+						}
+					}
+					
+					flipVal(model, bestKey);
 				}
 			}
 		}
-		
 		return null;
 	}
 	
 	private void flipVal(HashMap<Integer, Boolean> model, Integer key)
 	{
+		// flips the value of the key from false to true or from true to false.
 		if(model.get(key).booleanValue())
 			model.replace(key, Boolean.valueOf(false));
 		else
@@ -311,6 +335,7 @@ public class SAT_Solvers
 	
 	private ArrayList<Integer> initialSymbols(ArrayList<int []> clauses)
 	{
+		// an expensive way of getting a list of integers from 1 to the number of variables
 		ArrayList<Integer> syms = new ArrayList<Integer>();
 		for(int [] clause : clauses)
 			for(int c : clause)
@@ -327,7 +352,6 @@ public class SAT_Solvers
 			current = new java.io.File( "." ).getCanonicalPath();
 		} catch (IOException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		String tests = current + "\\src\\A3_tests";
@@ -343,7 +367,7 @@ public class SAT_Solvers
 		long [] dpllTimeData = new long [filesList.length];
 		int [][] walkSatCData = new int [filesList.length][10];
 		long [][] walkSatTimeData = new long [filesList.length][10];
-		for(int i = 0; i < 1; i++) //filesList.length
+		for(int i = 0; i < filesList.length; i++)
 		{
 			
 			s.nodesExpanded = 0;
@@ -353,11 +377,10 @@ public class SAT_Solvers
 			
 			// do dpll
 			long start = System.currentTimeMillis();
-			// result = s.DPLL(clauses, symbols, result);
+			result = s.DPLL(clauses, symbols, result);
 			long stop = System.currentTimeMillis();
 			
 			// record dpll data
-			/*
 			dpllNodeData[i] = s.nodesExpanded;
 			dpllTimeData[i] = stop - start;
 			
@@ -375,13 +398,14 @@ public class SAT_Solvers
 			}
 			else
 				System.out.println("DPLL: " + filesList[i].getName() + " UNSAT ");
-				*/
 			
-			for(int j = 0; j < 1; j++)
+			for(int j = 0; j < 10; j++)
 			{
+				s.topC = 0;
+				
 				// do walkSat
 				start = System.currentTimeMillis();
-				result = s.walkSAT(clauses, .5, 100000);
+				result = s.walkSAT(clauses, .5, 1000);
 				stop = System.currentTimeMillis();
 				
 				// record walkSat data
@@ -400,19 +424,66 @@ public class SAT_Solvers
 					System.out.println();
 				}
 				else
-					System.out.println("WalkSAT: " + filesList[i].getName() + " UNSAT ");
+					System.out.println("WalkSAT: " + filesList[i].getName() + " UNSAT " + s.topC);
 			}
 			
 			
 		}
-		/*
+		
+		// print dpll data
 		System.out.println("dpll time");
 		for(long l : dpllTimeData)
 			System.out.print(String.valueOf(l) + " ");
 		System.out.println("\ndpll nodes");
 		for(int nodeD : dpllNodeData)
 			System.out.print(String.valueOf(nodeD) + " ");
-		*/
+		
+		// print walkSAT data
+		long [] averageTime = new long [walkSatTimeData.length];
+		double [] averageC = new double [walkSatCData.length];
+		
+		System.out.println("\n\nwalkSat average time");
+		for(int i = 0; i < averageTime.length; i++)
+		{
+			long sum = 0;
+			for(long c : walkSatTimeData[i])
+				sum += c;
+			averageTime[i] = sum / 10;;
+			System.out.print(sum / 10);
+			System.out.print(" ");
+		}
+		
+		System.out.println("\n\nwalkSat all times");
+		for(long [] trial : walkSatTimeData)
+		{
+			for(long t : trial)
+			{
+				System.out.print(String.valueOf(t) + " ");
+			}
+			System.out.println();
+		}
+		
+		System.out.println("\n\nwalkSat average best C");
+		for(int i = 0; i < averageC.length; i++)
+		{
+			double sum = 0;
+			for(int c : walkSatCData[i])
+				sum += c;
+			averageC[i] = sum/10;
+			System.out.print(sum/10);
+			System.out.print(" ");
+		}
+		
+		System.out.println("\n\nwalkSat all best c");
+		for(int [] trial : walkSatCData)
+		{
+			for(int t : trial)
+			{
+				System.out.print(String.valueOf(t) + " ");
+			}
+			System.out.println();
+		}
+		
 		
 	}
 }
